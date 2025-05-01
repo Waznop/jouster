@@ -5,6 +5,8 @@ import { CardLayout } from '../layout/CardLayout';
 import { CardData } from '../types/game';
 import { CardPanel } from '../components/CardPanel';
 
+const MAX_VISIBLE_DECK_CARDS = 5;
+
 export default class GameScene extends Phaser.Scene {
   private stacks: Card[][] = [];
   private selectedCard: Card | null = null;
@@ -21,7 +23,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.background = this.add.image(0, 0, 'background').setOrigin(0);
+    this.background = this.add.image(0, 0, 'background');
     this.scaleBackground();
     this.initializeGame();
     this.scale.on('resize', this.handleResize, this);
@@ -29,11 +31,9 @@ export default class GameScene extends Phaser.Scene {
 
   private handleResize(): void {
     this.scaleBackground();
-    const newScale = this.layout.calculateCardScale();
+    this.updateDeckPosition();
 
-    // Update deck position and scale
-    const deckPos = this.layout.getDeckPosition();
-    this.updateDeckVisuals();
+    const newScale = this.layout.calculateCardScale();
 
     this.stacks.forEach((stack, stackIndex) => {
       stack.forEach((card, cardIndex) => {
@@ -52,32 +52,18 @@ export default class GameScene extends Phaser.Scene {
 
   private scaleBackground(): void {
     const { width, height } = this.scale;
-    this.background.setDisplaySize(width, height);
-  }
-
-  private repositionCards(): void {
-    this.stacks.forEach((stack, stackIndex) => {
-      stack.forEach((card, cardIndex) => {
-        const position = this.layout.getCardPosition(stackIndex, cardIndex);
-        this.tweens.add({
-          targets: card,
-          x: position.x,
-          y: position.y,
-          duration: 300,
-          ease: 'Power2',
-        });
-      });
-    });
+    const scaleX = width / this.background.width;
+    const scaleY = height / this.background.height;
+    const scale = Math.max(scaleX, scaleY);
+    this.background.setScale(scale);
+    this.background.setPosition(width / 2, height / 2);
   }
 
   private initializeGame(): void {
     this.layout = new CardLayout(this);
     this.deck = new Deck();
     this.stacks = [];
-
-    // Initialize deck visuals
-    this.updateDeckVisuals();
-
+    this.initializeDeck();
     this.dealInitialCards();
     this.setupInputHandlers();
   }
@@ -102,7 +88,7 @@ export default class GameScene extends Phaser.Scene {
   private setupInputHandlers(): void {
     this.input.on(
       'gameobjectdown',
-      (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+      (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
         if (this.activePanel) return; // Ignore input when panel is open
 
         // Only handle card selection for actual Card instances
@@ -181,9 +167,6 @@ export default class GameScene extends Phaser.Scene {
       card.index = targetStackIndex;
     });
 
-    // Update positions of cards in target stack
-    this.updateStackPositions(targetStackIndex);
-
     // Remove empty source stack and shift remaining stacks
     this.stacks.splice(sourceStackIndex, 1);
     this.shiftStacks();
@@ -194,34 +177,56 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  private updateStackPositions(stackIndex: number): void {
-    const stack = this.stacks[stackIndex];
-    stack.forEach((card, index) => {
-      const position = this.layout.getCardPosition(stackIndex, index);
-      card.index = stackIndex;
-      this.tweens.add({
-        targets: card,
-        x: position.x,
-        y: position.y,
-        duration: 300,
-        ease: 'Power2',
-      });
-      card.setDepth(index); // Ensure proper stacking order
+  private shiftStacks(): void {
+    this.stacks.forEach((stack, stackIndex) => {
+      this.updateStack(stack, stackIndex);
     });
   }
 
-  private shiftStacks(): void {
-    this.stacks.forEach((stack, stackIndex) => {
-      stack.forEach((card, cardIndex) => {
-        card.index = stackIndex;
-        const position = this.layout.getCardPosition(stackIndex, cardIndex);
-        this.tweens.add({
-          targets: card,
-          x: position.x,
-          y: position.y,
-          duration: 300,
-          ease: 'Power2',
-        });
+  private updateStack(stack: Card[], stackIndex: number): void {
+    stack.forEach((card, index) => {
+      const isVisible =
+        stack.length <= MAX_VISIBLE_DECK_CARDS || index >= stack.length - MAX_VISIBLE_DECK_CARDS;
+      card.setVisible(isVisible);
+      card.index = stackIndex;
+
+      if (isVisible) {
+        const visibleIndex =
+          stack.length <= MAX_VISIBLE_DECK_CARDS
+            ? index
+            : index - (stack.length - MAX_VISIBLE_DECK_CARDS);
+        this.updateCardPosition(card, stackIndex, visibleIndex);
+      }
+    });
+  }
+
+  private updateCardPosition(card: Card, stackIndex: number, visibleIndex: number): void {
+    const position = this.layout.getCardPosition(stackIndex, visibleIndex);
+    this.tweens.add({
+      targets: card,
+      x: position.x,
+      y: position.y,
+      duration: 300,
+      ease: 'Power2',
+    });
+    card.setDepth(visibleIndex);
+  }
+
+  private updateDeckPosition(): void {
+    const deckPos = this.layout.getDeckPosition();
+    const scale = this.layout.calculateCardScale();
+    const stackOffset = this.layout.getStackOffset();
+
+    // Update existing sprites
+    this.deckSprites.forEach((sprite, i) => {
+      sprite.setScale(scale);
+      sprite.setPosition(deckPos.x, deckPos.y - stackOffset * i);
+      this.tweens.add({
+        targets: sprite,
+        x: deckPos.x,
+        y: deckPos.y - stackOffset * i,
+        duration: 300,
+        ease: 'Power2',
       });
     });
   }
@@ -234,7 +239,9 @@ export default class GameScene extends Phaser.Scene {
       const stackOffset = this.layout.getStackOffset();
 
       // Calculate the position of the top card in the deck
-      const topDeckY = deckPos.y - Math.min(4, this.deck.remainingCards) * stackOffset;
+      const topDeckY =
+        deckPos.y -
+        Math.min(MAX_VISIBLE_DECK_CARDS - 1, this.deck.remainingCards - 1) * stackOffset;
 
       // Create card at deck's top position, face down
       const card = new Card(
@@ -247,11 +254,8 @@ export default class GameScene extends Phaser.Scene {
       );
       this.add.existing(card);
       card.setCardBack();
-      // Set depth higher than deck sprites (which go from 0 to 4)
-      card.setDepth(10);
-
-      // Update deck visuals after drawing
-      this.updateDeckVisuals();
+      // Set depth higher than deck sprites (which go from 0 to MAX_VISIBLE_DECK_CARDS-1)
+      card.setDepth(MAX_VISIBLE_DECK_CARDS);
 
       // Get final position
       const finalPos = this.layout.getCardPosition(newStackIndex, 0);
@@ -283,10 +287,14 @@ export default class GameScene extends Phaser.Scene {
 
       // Add to stacks array
       this.stacks[newStackIndex] = [card];
-    }
 
-    // Update deck sprite visibility
-    this.updateDeckVisuals();
+      // Update deck visuals if needed
+      if (this.deck.remainingCards < this.deckSprites.length) {
+        // Remove excess sprites
+        const spritesToRemove = this.deckSprites.splice(this.deck.remainingCards);
+        spritesToRemove.forEach((sprite) => sprite.destroy());
+      }
+    }
   }
 
   private clearSelection(): void {
@@ -298,8 +306,8 @@ export default class GameScene extends Phaser.Scene {
     this.validMoves = [];
   }
 
-  private updateDeckVisuals(): void {
-    // Clear existing deck sprites
+  private initializeDeck(): void {
+    // Clear any existing deck sprites first
     this.deckSprites.forEach((sprite) => sprite.destroy());
     this.deckSprites = [];
 
@@ -308,8 +316,7 @@ export default class GameScene extends Phaser.Scene {
     const stackOffset = this.layout.getStackOffset();
 
     // Create visual representation of deck height
-    // Show up to 5 cards to represent the deck
-    const numVisibleCards = Math.min(5, this.deck.remainingCards);
+    const numVisibleCards = Math.min(MAX_VISIBLE_DECK_CARDS, this.deck.remainingCards);
 
     for (let i = 0; i < numVisibleCards; i++) {
       const sprite = this.add
@@ -377,14 +384,7 @@ export default class GameScene extends Phaser.Scene {
 
   private showDeckPanel(): void {
     if (this.deck.remainingCards > 0) {
-      // Get remaining cards from the deck
-      const cardDataList: CardData[] = [];
-      let nextCard = this.deck.peekNextCard();
-      while (nextCard) {
-        cardDataList.push(nextCard);
-        nextCard = this.deck.peekNextCard(cardDataList.length);
-      }
-
+      const cardDataList = this.deck.getRemainingCards();
       this.activePanel = new CardPanel(this, cardDataList, () => {
         this.activePanel = null;
       });

@@ -74,9 +74,6 @@ export class CardPanel {
       cardWidth * this.COLS + this.CARD_SPACING * (this.COLS - 1) + this.PANEL_PADDING * 2;
     const panelHeight = gameHeight * 0.5;
 
-    // Force a layout update to ensure we have correct dimensions
-    this.scene.scale.refresh();
-
     const x = gameWidth / 2;
     const y = gameHeight / 2;
 
