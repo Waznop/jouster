@@ -324,38 +324,36 @@ export default class GameScene extends Phaser.Scene {
         .setScale(scale)
         .setDepth(i);
 
-      // Only make the top sprite interactive for long press
-      if (i === numVisibleCards - 1) {
-        sprite.setInteractive();
+      // Make all sprites interactive for long press when there are fewer cards
+      sprite.setInteractive();
 
-        let deckTimer: Phaser.Time.TimerEvent | null = null;
+      let deckTimer: Phaser.Time.TimerEvent | null = null;
 
-        sprite.on('pointerdown', () => {
-          if (this.activePanel) return;
+      sprite.on('pointerdown', () => {
+        if (this.activePanel) return;
 
-          deckTimer = this.time.delayedCall(500, () => {
-            if (deckTimer) {
-              // Only show panel if timer wasn't cleared
-              this.showDeckPanel();
-              deckTimer = null;
-            }
-          });
-        });
-
-        sprite.on('pointerup', () => {
+        deckTimer = this.time.delayedCall(500, () => {
           if (deckTimer) {
-            deckTimer.destroy();
+            // Only show panel if timer wasn't cleared
+            this.showDeckPanel();
             deckTimer = null;
           }
         });
+      });
 
-        sprite.on('pointerout', () => {
-          if (deckTimer) {
-            deckTimer.destroy();
-            deckTimer = null;
-          }
-        });
-      }
+      sprite.on('pointerup', () => {
+        if (deckTimer) {
+          deckTimer.destroy();
+          deckTimer = null;
+        }
+      });
+
+      sprite.on('pointerout', () => {
+        if (deckTimer) {
+          deckTimer.destroy();
+          deckTimer = null;
+        }
+      });
 
       this.deckSprites.push(sprite);
     }
