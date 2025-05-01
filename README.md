@@ -1,4 +1,4 @@
-# Cascade
+# Jouster
 
 A mobile-first, browser-based solitaire game based on Accordion rules. Built with Phaser 3.
 

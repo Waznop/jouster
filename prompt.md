@@ -1,8 +1,8 @@
-# Game Design Document: "Cascade"
+# Game Design Document: "Jouster"
 
 ## Overview
 
-**Cascade** is a mobile-first, browser-based solitaire game based on "Accordion" rules. Players aim to condense the deck into as few stacks as possible by stacking cards onto each other according to matching suits or ranks, with an added spatial constraint. Designed with smooth pixel art aesthetics reminiscent of "Sword & Sworcery," it delivers a cozy yet strategic experience.
+**Jouster** is a mobile-first, browser-based solitaire game based on "Accordion" rules. Players aim to condense the deck into as few stacks as possible by stacking cards onto each other according to matching suits or ranks, with an added spatial constraint. Designed with smooth pixel art aesthetics reminiscent of "Sword & Sworcery," it delivers a cozy yet strategic experience.
 
 ## Core Gameplay
 
