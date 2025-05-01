@@ -33,7 +33,6 @@ export class CardPanel {
     this.createPanel();
     this.populateCards(cardDataList);
     this.setupScrolling();
-    this.setupCloseButton(onClose);
 
     // Add resize handler
     this.scene.scale.on('resize', this.handleResize, this);
@@ -65,29 +64,6 @@ export class CardPanel {
 
     // Update card positions
     this.updateCardPositions();
-
-    // Update close button position and size
-    const closeContainer = this.panel.getAt(2) as Phaser.GameObjects.Container;
-    if (closeContainer) {
-      const { width: cardWidth } = this.layout.getCardDimensions();
-      const scaledCardWidth = cardWidth * this.PANEL_CARD_SCALE_FACTOR;
-      const margin = scaledCardWidth * 0.2;
-      const buttonRadius = scaledCardWidth * 0.15;
-
-      closeContainer.setPosition(
-        panelDimensions.width / 2 - margin,
-        -panelDimensions.height / 2 + margin
-      );
-
-      // Update button and text size
-      const closeButton = closeContainer.getAt(0) as Phaser.GameObjects.Arc;
-      const closeText = closeContainer.getAt(1) as Phaser.GameObjects.Text;
-
-      if (closeButton && closeText) {
-        closeButton.setRadius(buttonRadius);
-        closeText.setFontSize(buttonRadius * 1.2);
-      }
-    }
   }
 
   private calculatePanelDimensions(): { width: number; height: number } {
@@ -188,37 +164,6 @@ export class CardPanel {
     });
   }
 
-  private setupCloseButton(onClose: () => void): void {
-    const { width: cardWidth } = this.layout.getCardDimensions();
-    const scaledCardWidth = cardWidth * this.PANEL_CARD_SCALE_FACTOR;
-    const buttonRadius = scaledCardWidth * 0.15;
-    const margin = scaledCardWidth * 0.2; // 20% of scaled card width as margin
-
-    // Create a container for the close button that will maintain its position relative to the panel
-    const closeContainer = this.scene.add.container(
-      this.background.width / 2 - margin,
-      -this.background.height / 2 + margin
-    );
-
-    const closeButton = this.scene.add.circle(0, 0, buttonRadius, 0xff0000);
-
-    const closeText = this.scene.add
-      .text(0, 0, 'X', {
-        color: '#ffffff',
-        fontSize: `${buttonRadius * 1.2}px`,
-      })
-      .setOrigin(0.5);
-
-    closeButton.setInteractive({ useHandCursor: true });
-    closeButton.on('pointerdown', () => {
-      this.destroy();
-      onClose();
-    });
-
-    closeContainer.add([closeButton, closeText]);
-    this.panel.add(closeContainer);
-  }
-
   private populateCards(cardDataList: CardData[]): void {
     const { x: startX, y: startY, cardSpacing } = this.getContentArea();
     const { width: cardWidth, height: cardHeight } = this.layout.getCardDimensions();
@@ -286,6 +231,37 @@ export class CardPanel {
         Phaser.Geom.Rectangle.Contains
       );
 
+      // Add wheel event handler
+      this.scene.input.on(
+        'wheel',
+        (
+          pointer: Phaser.Input.Pointer,
+          _gameObjects: Phaser.GameObjects.GameObject[],
+          _deltaX: number,
+          deltaY: number
+        ) => {
+          // Check if pointer is within panel bounds
+          const panelBounds = new Phaser.Geom.Rectangle(
+            this.panel.x - this.background.width / 2,
+            this.panel.y - this.background.height / 2,
+            this.background.width,
+            this.background.height
+          );
+
+          if (panelBounds.contains(pointer.x, pointer.y)) {
+            // Adjust scroll speed - negative deltaY means scroll down
+            const scrollSpeed = 0.5; // Adjust this value to control scroll speed
+            const newY = Phaser.Math.Clamp(
+              this.contentContainer.y - deltaY * scrollSpeed,
+              -(contentHeight - panelHeight + this.getContentArea().cardSpacing),
+              0
+            );
+
+            this.contentContainer.y = newY;
+          }
+        }
+      );
+
       this.panel.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
         this.isDragging = true;
         this.lastY = pointer.y;
@@ -310,7 +286,7 @@ export class CardPanel {
 
           const newY = Phaser.Math.Clamp(
             this.contentContainer.y + deltaY,
-            -(contentHeight - panelHeight + this.getContentArea().cardSpacing), // Add extra space for bottom margin
+            -(contentHeight - panelHeight + this.getContentArea().cardSpacing),
             0
           );
 
@@ -390,6 +366,7 @@ export class CardPanel {
     if (this.upCallback) {
       this.scene.input.off('pointerup', this.upCallback);
     }
+    this.scene.input.off('wheel'); // Remove wheel event listener
     if (this.momentumTimer) {
       this.momentumTimer.destroy();
     }
