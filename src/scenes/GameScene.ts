@@ -18,6 +18,8 @@ export default class GameScene extends Phaser.Scene {
   private deckSprites: Phaser.GameObjects.Sprite[] = [];
   private longPressTimer: Phaser.Time.TimerEvent | null = null;
   private activePanel: CardPanel | null = null;
+  private isGameOver = false;
+  private endText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super('GameScene');
@@ -49,6 +51,11 @@ export default class GameScene extends Phaser.Scene {
         });
       });
     });
+
+    // Re-center end game text on resize
+    if (this.endText) {
+      this.endText.setPosition(this.scale.width / 2, this.scale.height / 2);
+    }
   }
 
   private scaleBackground(): void {
@@ -93,6 +100,7 @@ export default class GameScene extends Phaser.Scene {
     this.input.on(
       'gameobjectdown',
       (_pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
+        if (this.isGameOver) return;
         if (this.activePanel) return; // Ignore input when panel is open
 
         // Only handle card selection for actual Card instances
@@ -179,6 +187,8 @@ export default class GameScene extends Phaser.Scene {
     if (this.deck.remainingCards > 0) {
       this.dealNewCard();
     }
+
+    this.checkGameEnded();
   }
 
   private shiftStacks(): void {
@@ -308,6 +318,8 @@ export default class GameScene extends Phaser.Scene {
     }
     this.validMoves.forEach((card) => card.clearTint());
     this.validMoves = [];
+
+    this.checkGameEnded();
   }
 
   private initializeDeck(): void {
@@ -391,5 +403,55 @@ export default class GameScene extends Phaser.Scene {
         this.activePanel = null;
       });
     }
+  }
+
+  /**
+   * Checks whether the game has ended (no remaining cards in the deck and no valid moves).
+   * If so, displays a centered ending message and prevents further interaction.
+   */
+  private checkGameEnded(): void {
+    if (this.isGameOver) return;
+
+    // Game cannot end while cards remain in the deck (new possibilities can appear)
+    if (this.deck.remainingCards > 0) return;
+
+    for (let i = 0; i < this.stacks.length; i++) {
+      const sourceStack = this.stacks[i];
+      if (!sourceStack || sourceStack.length === 0) continue;
+
+      const sourceCard = sourceStack[sourceStack.length - 1]; // Top card of source stack
+
+      const potentialTargets = [i - 1, i - 3].filter((idx) => idx >= 0);
+      for (const idx of potentialTargets) {
+        const targetStack = this.stacks[idx];
+        if (!targetStack || targetStack.length === 0) continue;
+
+        const targetCard = targetStack[targetStack.length - 1];
+        if (Card.isValidMove(sourceCard, targetCard)) {
+          // A valid move exists, game not ended
+          return;
+        }
+      }
+    }
+
+    // No moves available – game over
+    this.isGameOver = true;
+    this.showGameEndedText();
+  }
+
+  /**
+   * Creates and centers the ending text.
+   */
+  private showGameEndedText(): void {
+    const { width, height } = this.scale;
+    this.endText = this.add
+      .text(width / 2, height / 2, 'The End', {
+        fontFamily: 'Arial',
+        fontSize: '48px',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
   }
 }
