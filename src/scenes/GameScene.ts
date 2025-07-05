@@ -19,7 +19,8 @@ export default class GameScene extends Phaser.Scene {
   private longPressTimer: Phaser.Time.TimerEvent | null = null;
   private activePanel: CardPanel | null = null;
   private isGameOver = false;
-  private endText: Phaser.GameObjects.Text | null = null;
+  private endPanel: Phaser.GameObjects.Container | null = null;
+  private seed!: string;
 
   constructor() {
     super('GameScene');
@@ -52,9 +53,9 @@ export default class GameScene extends Phaser.Scene {
       });
     });
 
-    // Re-center end game text on resize
-    if (this.endText) {
-      this.endText.setPosition(this.scale.width / 2, this.scale.height / 2);
+    // Reposition end game panel on resize
+    if (this.endPanel) {
+      this.updateEndPanelPosition();
     }
   }
 
@@ -68,11 +69,18 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private initializeGame(): void {
+    // Reset game-over state on (re)start
+    this.isGameOver = false;
+    if (this.endPanel) {
+      this.endPanel.destroy(true);
+      this.endPanel = null;
+    }
+
     this.layout = new CardLayout(this);
 
     // Obtain a deterministic seed from the URL (or generate a new one)
-    const seed = getOrCreateSeed();
-    this.deck = new Deck(seed);
+    this.seed = getOrCreateSeed();
+    this.deck = new Deck(this.seed);
     this.stacks = [];
     this.initializeDeck();
     this.dealInitialCards();
@@ -436,22 +444,185 @@ export default class GameScene extends Phaser.Scene {
 
     // No moves available – game over
     this.isGameOver = true;
-    this.showGameEndedText();
+    const totalCards = 52; // Standard deck size
+    const pilesLeft = this.stacks.length;
+
+    // Find the smallest pile size remaining
+    let minPile = Number.MAX_SAFE_INTEGER;
+    this.stacks.forEach((stack) => {
+      if (stack.length < minPile) {
+        minPile = stack.length;
+      }
+    });
+
+    if (minPile === Number.MAX_SAFE_INTEGER) {
+      minPile = 0;
+    }
+
+    // Compute score according to new formula
+    let score = 0;
+    if (pilesLeft >= 1 && pilesLeft <= totalCards) {
+      const rawScore = totalCards - pilesLeft + minPile / totalCards;
+      score = (100 * rawScore) / totalCards;
+    }
+    this.showEndPanel(score);
   }
 
   /**
-   * Creates and centers the ending text.
+   * Creates an overlay panel with end text and a restart button.
    */
-  private showGameEndedText(): void {
+  private showEndPanel(score: number): void {
+    if (this.endPanel) return;
+
     const { width, height } = this.scale;
-    this.endText = this.add
-      .text(width / 2, height / 2, 'The End', {
+
+    // Semi-transparent full-screen overlay
+    const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.6).setOrigin(0);
+
+    // Panel background
+    const panelWidth = Math.min(width * 0.8, 400);
+    const panelHeight = Math.min(height * 0.5, 320);
+    const panelBg = this.add
+      .rectangle(width / 2, height / 2, panelWidth, panelHeight, 0x222222, 0.9)
+      .setStrokeStyle(4, 0xffffff);
+
+    // End text
+    const yStart = height / 2 - panelHeight / 3;
+
+    const endText = this.add
+      .text(width / 2, yStart, 'The End', {
         fontFamily: 'Arial',
         fontSize: '48px',
         color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 4,
+        align: 'center',
       })
       .setOrigin(0.5);
+
+    // Seed text
+    const seedText = this.add
+      .text(width / 2, yStart + 60, `Seed: ${this.seed}`, {
+        fontFamily: 'Arial',
+        fontSize: '24px',
+        color: '#dddddd',
+      })
+      .setOrigin(0.5);
+
+    // Score text
+    const scoreRounded = Math.round(score * 10) / 10; // one decimal
+    const scoreText = this.add
+      .text(width / 2, yStart + 100, `Score: ${scoreRounded}%`, {
+        fontFamily: 'Arial',
+        fontSize: '28px',
+        color: '#ffffff',
+      })
+      .setOrigin(0.5);
+
+    // Restart button background
+    const btnWidth = 160;
+    const btnHeight = 50;
+    const btnY = height / 2 + panelHeight / 4;
+
+    // Restart Button
+    const restartBtnBg = this.add
+      .rectangle(width / 2 - btnWidth / 2 - 10, btnY, btnWidth, btnHeight, 0xffffff)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.scene.restart();
+      });
+
+    const restartBtnText = this.add
+      .text(restartBtnBg.x, restartBtnBg.y, 'Restart', {
+        fontFamily: 'Arial',
+        fontSize: '28px',
+        color: '#000000',
+      })
+      .setOrigin(0.5);
+
+    // New Button
+    const newBtnBg = this.add
+      .rectangle(width / 2 + btnWidth / 2 + 10, btnY, btnWidth, btnHeight, 0xffffff)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        const newSeed = this.generateRandomSeed();
+
+        // Build new path in the form /jouster/{newSeed}
+        const segments = window.location.pathname.split('/').filter(Boolean);
+        const jousterIdx = segments.indexOf('jouster');
+
+        let newPath: string;
+        if (jousterIdx !== -1) {
+          const baseSegments = segments.slice(0, jousterIdx + 1); // include 'jouster'
+          newPath = '/' + [...baseSegments, newSeed].join('/');
+        } else {
+          // Fallback: append to current path
+          newPath = window.location.pathname.replace(/[^/]*$/, newSeed);
+        }
+
+        window.location.href = newPath;
+      });
+
+    const newBtnText = this.add
+      .text(newBtnBg.x, newBtnBg.y, 'New', {
+        fontFamily: 'Arial',
+        fontSize: '28px',
+        color: '#000000',
+      })
+      .setOrigin(0.5);
+
+    // Combine into a container for easy repositioning
+    this.endPanel = this.add.container(0, 0, [
+      overlay,
+      panelBg,
+      endText,
+      seedText,
+      scoreText,
+      restartBtnBg,
+      restartBtnText,
+      newBtnBg,
+      newBtnText,
+    ]);
+    this.endPanel.setDepth(1000);
+  }
+
+  /** Updates panel and overlay size/position on window resize */
+  private updateEndPanelPosition(): void {
+    if (!this.endPanel) return;
+
+    const { width, height } = this.scale;
+    const overlay = this.endPanel.list[0] as Phaser.GameObjects.Rectangle;
+    overlay.setSize(width, height);
+
+    const panelBg = this.endPanel.list[1] as Phaser.GameObjects.Rectangle;
+    const endText = this.endPanel.list[2] as Phaser.GameObjects.Text;
+    const seedText = this.endPanel.list[3] as Phaser.GameObjects.Text;
+    const scoreText = this.endPanel.list[4] as Phaser.GameObjects.Text;
+    const restartBtnBg = this.endPanel.list[5] as Phaser.GameObjects.Rectangle;
+    const restartBtnText = this.endPanel.list[6] as Phaser.GameObjects.Text;
+    const newBtnBg = this.endPanel.list[7] as Phaser.GameObjects.Rectangle;
+    const newBtnText = this.endPanel.list[8] as Phaser.GameObjects.Text;
+
+    const panelWidth = Math.min(width * 0.8, 400);
+    const panelHeight = Math.min(height * 0.5, 320);
+    panelBg.setSize(panelWidth, panelHeight);
+    panelBg.setPosition(width / 2, height / 2);
+
+    const yStart = height / 2 - panelHeight / 3;
+    endText.setPosition(width / 2, yStart);
+    seedText.setPosition(width / 2, yStart + 60);
+    scoreText.setPosition(width / 2, yStart + 100);
+
+    const btnWidth = 160;
+    const btnY = height / 2 + panelHeight / 4;
+    restartBtnBg.setPosition(width / 2 - btnWidth / 2 - 10, btnY);
+    restartBtnText.setPosition(restartBtnBg.x, restartBtnBg.y);
+
+    newBtnBg.setPosition(width / 2 + btnWidth / 2 + 10, btnY);
+    newBtnText.setPosition(newBtnBg.x, newBtnBg.y);
+  }
+
+  private generateRandomSeed(): string {
+    return Math.random().toString(36).substring(2, 9);
   }
 }
