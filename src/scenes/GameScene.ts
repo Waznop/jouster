@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Card } from '../entities/Card';
 import { Deck } from '../entities/Deck';
+import { getOrCreateSeed } from '../utils/seed';
 import { CardLayout } from '../layout/CardLayout';
 import { CardData } from '../types/game';
 import { CardPanel } from '../components/CardPanel';
@@ -61,7 +62,10 @@ export default class GameScene extends Phaser.Scene {
 
   private initializeGame(): void {
     this.layout = new CardLayout(this);
-    this.deck = new Deck();
+
+    // Obtain a deterministic seed from the URL (or generate a new one)
+    const seed = getOrCreateSeed();
+    this.deck = new Deck(seed);
     this.stacks = [];
     this.initializeDeck();
     this.dealInitialCards();
