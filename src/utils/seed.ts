@@ -1,20 +1,16 @@
 export function getOrCreateSeed(): string {
-  // Split the current pathname into meaningful segments
-  const segments = window.location.pathname.split('/').filter(Boolean);
+  // Check for seed in the current query parameters
+  const params = new URLSearchParams(window.location.search);
+  let seed = params.get('seed');
 
-  // Attempt to locate the seed following the "jouster" segment
-  const jousterIndex = segments.indexOf('jouster');
-  let seed: string | undefined;
-
-  if (jousterIndex !== -1 && segments.length > jousterIndex + 1) {
-    seed = segments[jousterIndex + 1];
-  }
-
-  // If no seed in the URL, generate one and update the address bar (without reloading)
+  // If no seed present, generate one and update the URL without reloading
   if (!seed) {
     seed = Math.random().toString(36).slice(2, 8); // 6-character alphanumeric
-    const newPath = `/jouster/${seed}`;
-    window.history.replaceState({}, '', newPath);
+    params.set('seed', seed);
+
+    // Preserve current pathname (e.g. "/jouster/") while appending the new seed param
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newUrl);
   }
 
   return seed;

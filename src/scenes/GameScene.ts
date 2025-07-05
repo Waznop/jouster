@@ -21,6 +21,7 @@ export default class GameScene extends Phaser.Scene {
   private isGameOver = false;
   private endPanel: Phaser.GameObjects.Container | null = null;
   private seed!: string;
+  private startTime: number = 0;
 
   constructor() {
     super('GameScene');
@@ -71,6 +72,8 @@ export default class GameScene extends Phaser.Scene {
   private initializeGame(): void {
     // Reset game-over state on (re)start
     this.isGameOver = false;
+    // Record start time for elapsed-time calculation
+    this.startTime = this.time.now;
     if (this.endPanel) {
       this.endPanel.destroy(true);
       this.endPanel = null;
@@ -420,9 +423,7 @@ export default class GameScene extends Phaser.Scene {
   private checkGameEnded(): void {
     if (this.isGameOver) return;
 
-    // Game cannot end while cards remain in the deck (new possibilities can appear)
-    if (this.deck.remainingCards > 0) return;
-
+    // Even if cards remain in the deck, the game ends when no valid moves are available.
     for (let i = 0; i < this.stacks.length; i++) {
       const sourceStack = this.stacks[i];
       if (!sourceStack || sourceStack.length === 0) continue;
@@ -476,6 +477,12 @@ export default class GameScene extends Phaser.Scene {
 
     const { width, height } = this.scale;
 
+    // Calculate elapsed time since game start and format as mm:ss
+    const elapsedMs = this.time.now - this.startTime;
+    const minutes = Math.floor(elapsedMs / 60000);
+    const seconds = Math.floor((elapsedMs % 60000) / 1000);
+    const timeFormatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
     // Semi-transparent full-screen overlay
     const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.6).setOrigin(0);
 
@@ -512,15 +519,24 @@ export default class GameScene extends Phaser.Scene {
     const scoreText = this.add
       .text(width / 2, yStart + 100, `Score: ${scoreRounded}%`, {
         fontFamily: 'Arial',
-        fontSize: '28px',
-        color: '#ffffff',
+        fontSize: '24px',
+        color: '#dddddd',
+      })
+      .setOrigin(0.5);
+
+    // Time text
+    const timeText = this.add
+      .text(width / 2, yStart + 140, `Time: ${timeFormatted}`, {
+        fontFamily: 'Arial',
+        fontSize: '24px',
+        color: '#dddddd',
       })
       .setOrigin(0.5);
 
     // Restart button background
     const btnWidth = 160;
     const btnHeight = 50;
-    const btnY = height / 2 + panelHeight / 4;
+    const btnY = height / 2 + panelHeight / 3;
 
     // Restart Button
     const restartBtnBg = this.add
@@ -547,20 +563,12 @@ export default class GameScene extends Phaser.Scene {
       .on('pointerdown', () => {
         const newSeed = this.generateRandomSeed();
 
-        // Build new path in the form /jouster/{newSeed}
-        const segments = window.location.pathname.split('/').filter(Boolean);
-        const jousterIdx = segments.indexOf('jouster');
+        // Build new URL in the form /jouster/?seed={newSeed}
+        const params = new URLSearchParams(window.location.search);
+        params.set('seed', newSeed);
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
 
-        let newPath: string;
-        if (jousterIdx !== -1) {
-          const baseSegments = segments.slice(0, jousterIdx + 1); // include 'jouster'
-          newPath = '/' + [...baseSegments, newSeed].join('/');
-        } else {
-          // Fallback: append to current path
-          newPath = window.location.pathname.replace(/[^/]*$/, newSeed);
-        }
-
-        window.location.href = newPath;
+        window.location.href = newUrl;
       });
 
     const newBtnText = this.add
@@ -578,6 +586,7 @@ export default class GameScene extends Phaser.Scene {
       endText,
       seedText,
       scoreText,
+      timeText,
       restartBtnBg,
       restartBtnText,
       newBtnBg,
@@ -598,10 +607,11 @@ export default class GameScene extends Phaser.Scene {
     const endText = this.endPanel.list[2] as Phaser.GameObjects.Text;
     const seedText = this.endPanel.list[3] as Phaser.GameObjects.Text;
     const scoreText = this.endPanel.list[4] as Phaser.GameObjects.Text;
-    const restartBtnBg = this.endPanel.list[5] as Phaser.GameObjects.Rectangle;
-    const restartBtnText = this.endPanel.list[6] as Phaser.GameObjects.Text;
-    const newBtnBg = this.endPanel.list[7] as Phaser.GameObjects.Rectangle;
-    const newBtnText = this.endPanel.list[8] as Phaser.GameObjects.Text;
+    const timeText = this.endPanel.list[5] as Phaser.GameObjects.Text;
+    const restartBtnBg = this.endPanel.list[6] as Phaser.GameObjects.Rectangle;
+    const restartBtnText = this.endPanel.list[7] as Phaser.GameObjects.Text;
+    const newBtnBg = this.endPanel.list[8] as Phaser.GameObjects.Rectangle;
+    const newBtnText = this.endPanel.list[9] as Phaser.GameObjects.Text;
 
     const panelWidth = Math.min(width * 0.8, 400);
     const panelHeight = Math.min(height * 0.5, 320);
@@ -612,9 +622,10 @@ export default class GameScene extends Phaser.Scene {
     endText.setPosition(width / 2, yStart);
     seedText.setPosition(width / 2, yStart + 60);
     scoreText.setPosition(width / 2, yStart + 100);
+    timeText.setPosition(width / 2, yStart + 140);
 
     const btnWidth = 160;
-    const btnY = height / 2 + panelHeight / 4;
+    const btnY = height / 2 + panelHeight / 3;
     restartBtnBg.setPosition(width / 2 - btnWidth / 2 - 10, btnY);
     restartBtnText.setPosition(restartBtnBg.x, restartBtnBg.y);
 
